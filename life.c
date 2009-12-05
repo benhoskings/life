@@ -1,25 +1,53 @@
-#include <stdlib.h>
-#include <stdio.h>
-#include <unistd.h>
+/******************************************************************************
+The Game of Life, implemented in ncurses.
+run it with a list of (x, y) pairs, for example, for the pairs
+(3, 4), (3, 5), (3, 6), (4, 4), (4, 5), (4, 6) ,
+run
+$ ./a.out 3 4 3 5 3 6 4 4 4 5 4 6
 
-#define DIM 25
+Copyright (c) 2003, Ben Hoskings <benhoskings@sourceforge.net>
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without modification,
+are permitted provided that the following conditions are met:
+
+    * Redistributions of source code must retain the above copyright notice,
+    this list of conditions and the following disclaimer.
+    * Redistributions in binary form must reproduce the above copyright notice,
+    this list of conditions and the following disclaimer in the documentation
+    and/or other materials provided with the distribution.
+    * Neither the author's name, nor the names of his contributors, may be used
+    to endorse or promote products derived from this software without specific
+    prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
+ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
+ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+******************************************************************************/
+
+#include <ncurses.h>
+#include <stdlib.h>
+#include <unistd.h>
 
 #define max(a, b) (a > b ? a : b)
 #define min(a, b) (a < b ? a : b)
 
-bool board_0[DIM][DIM], board_1[DIM][DIM];
-bool b = 0;
+#define CELL_CHAR '@'
 
-// get the value at (x, y) on the live board.
-bool board(int i, int j)
-{
-	return (b ? board_1[i][j] : board_0[i][j]);
-}
+int dim_x, dim_y;
+WINDOW *buf_1, *buf_2, *buf, *buf_off;
 
-// set (x, y) on the buffer board (i.e. the _not_ being shown) to n.
-int set_board(int i, int j, bool n)
+void flip_buf()
 {
-	b ? (board_0[i][j] = n) : (board_1[i][j] = n);
+	(buf == buf_1) ? (buf = buf_2) : (buf = buf_1);
+	(buf == buf_1) ? (buf_off = buf_2) : (buf_off = buf_1);
 }
 
 // loop through a 3x3 square around (x, y) and count the live neighbours (that
@@ -28,14 +56,15 @@ int get_live_nbs(int x, int y)
 {
 	int i, j, count = 0;
 
-	for (i = max(x-1, 0); i <= min(x+1, DIM-1); i++)
+	for (i = max(x-1, 0); i <= min(x+1, dim_x - 1); i++)
 	{
-		for (j = max(y-1, 0); j <= min(y+1, DIM-1); j++)
+		for (j = max(y-1, 0); j <= min(y+1, dim_y - 1); j++)
 		{
 			if ((i == x) && (j == y))
 				continue;
 
-			count += board(i, j);
+			if (mvwinch(buf, j, i) == CELL_CHAR)
+				count++;
 		}
 	}
 	return count;
@@ -43,11 +72,8 @@ int get_live_nbs(int x, int y)
 
 int main(int argc, char **argv)
 {
-	int i, j, live_nbs;
-
-	for (i = 0; i < DIM; i++)
-		for (j = 0; j < DIM; j++)
-			board_0[i][j] = board_1[i][j] = 0; // zero the boards
+	int i, j, live_nbs, step = 1;
+	bool equal = 0;
 
 	if (argc % 2 == 0)
 	{
@@ -55,37 +81,57 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
-	b = !b;
+	initscr();
+	nocbreak();
+	timeout(0);
+	noecho();
+
+	getmaxyx(stdscr, dim_y, dim_x);
+
+	buf = buf_1 = newwin(dim_y, dim_x, 0, 0);
+	buf_off = buf_2 = newwin(dim_y, dim_x, 0, 0);
+
 	for (i = 1; i < argc; i += 2)
-		set_board(atoi(argv[i]), atoi(argv[i + 1]), 1);
-	b = !b;
+		mvwaddch(buf, atoi(argv[i + 1]) + 1, atoi(argv[i]) + 1, CELL_CHAR);
 
 	while (1)
 	{
-		printf("\n");
-		for (i = 0; i < DIM; i++)
+		if (!equal)
 		{
-			printf("\n|");
-			for (j = 0; j < DIM; j++)
+			box(buf, 0, 0);
+			mvwprintw(buf, dim_y - 1, 4, "%d", step++);
+			mvwprintw(buf, 0, 4, "The Game of Life");
+			mvwprintw(buf, 0, dim_x - 15, "\'q\' to quit");
+			wrefresh(buf);
+			equal = 1;
+
+			for (i = 1; i < dim_x - 1; i++)
 			{
-				live_nbs = get_live_nbs(i, j);
+				for (j = 1; j < dim_y - 1; j++)
+				{
+					live_nbs = get_live_nbs(i, j);
 
-				if (live_nbs == 3)
-					set_board(i, j, 1);
+					if (live_nbs == 3)
+						mvwaddch(buf_off, j, i, CELL_CHAR);
+					else if (live_nbs != 2)
+						mvwaddch(buf_off, j, i, ' ');
+					else
+						mvwaddch(buf_off, j, i, mvwinch(buf, j, i));
 
-				else if (live_nbs != 2)
-					set_board(i, j, 0);
-
-				else
-					set_board(i, j, board(i, j));
-
-				printf("%c", ((board(i, j) == 1) ? '@' : ' '));
+					if (mvwinch(buf, j, i) != mvwinch(buf_off, j, i))
+						equal = 0;
+				}
 			}
-			printf("| %d", i);
-			fflush(stdout);
+			flip_buf();
 		}
-		b = !b;
-
 		usleep(100000);
+
+		if (getch() == 'q')
+		{
+			delwin(buf_1);
+			delwin(buf_2);
+			endwin();
+			return 0;
+		}
 	}
 }
