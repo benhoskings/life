@@ -39,6 +39,8 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define max(a, b) (a > b ? a : b)
 #define min(a, b) (a < b ? a : b)
 
+#define CELL_CHAR '@'
+
 int dim_x, dim_y;
 WINDOW *buf_1, *buf_2, *buf, *buf_off;
 
@@ -61,7 +63,7 @@ int get_live_nbs(int x, int y)
 			if ((i == x) && (j == y))
 				continue;
 
-			if (mvwinch(buf, j, i) == '@')
+			if (mvwinch(buf, j, i) == CELL_CHAR)
 				count++;
 		}
 	}
@@ -90,7 +92,7 @@ int main(int argc, char **argv)
 	buf_off = buf_2 = newwin(dim_y, dim_x, 0, 0);
 
 	for (i = 1; i < argc; i += 2)
-		mvwaddch(buf, atoi(argv[i + 1]) + 1, atoi(argv[i]) + 1, '@');
+		mvwaddch(buf, atoi(argv[i + 1]) + 1, atoi(argv[i]) + 1, CELL_CHAR);
 
 	while (1)
 	{
@@ -110,7 +112,7 @@ int main(int argc, char **argv)
 					live_nbs = get_live_nbs(i, j);
 
 					if (live_nbs == 3)
-						mvwaddch(buf_off, j, i, '@');
+						mvwaddch(buf_off, j, i, CELL_CHAR);
 					else if (live_nbs != 2)
 						mvwaddch(buf_off, j, i, ' ');
 					else
