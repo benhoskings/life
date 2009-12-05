@@ -124,7 +124,7 @@ int main(int argc, char **argv)
 			}
 			flip_buf();
 		}
-		usleep(300000);
+		usleep(100000);
 
 		if (getch() == 'q')
 		{
